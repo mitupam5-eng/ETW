@@ -1,0 +1,430 @@
+-- Eat The World - Loadstring Optimized Version
+repeat task.wait() until game:IsLoaded()
+
+local Players = game:GetService("Players")
+local Player = Players.LocalPlayer
+local PlayerGui = Player:WaitForChild("PlayerGui")
+local CoreGui = game:GetService("CoreGui")
+local VirtualInputManager = game:GetService("VirtualInputManager")
+local RunService = game:GetService("RunService")
+
+-- Xóa GUI cũ để tránh trùng lặp khi re-execute loadstring
+if CoreGui:FindFirstChild("UniversalSpeedGridMenu") then
+    CoreGui.UniversalSpeedGridMenu:Destroy()
+end
+
+_G.AutoEatOnly = false
+_G.AutoFarm = false
+_G.PlatformEnabled = false
+_G.CurrentState = "EATING"
+
+local FORCED_TIME = 210
+local stateStartTime = tick()
+
+-- 1. TẠO KHUNG CHÍNH UI (MAIN MENU)
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "UniversalSpeedGridMenu"
+ScreenGui.Parent = CoreGui
+ScreenGui.ResetOnSpawn = false
+
+local MainFrame = Instance.new("Frame")
+MainFrame.Name = "MainFrame"
+MainFrame.Size = UDim2.new(0, 260, 0, 230)
+MainFrame.Position = UDim2.new(0.1, 0, 0.25, 0)
+MainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+MainFrame.BorderSizePixel = 0
+MainFrame.Active = true
+MainFrame.Draggable = true
+MainFrame.Parent = ScreenGui
+
+local Corner = Instance.new("UICorner")
+Corner.CornerRadius = UDim.new(0, 10)
+Corner.Parent = MainFrame
+
+local TitleBar = Instance.new("TextLabel")
+TitleBar.Size = UDim2.new(1, 0, 0, 35)
+TitleBar.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+TitleBar.Text = "   ETW - ULTIMATE FARM"
+TitleBar.TextColor3 = Color3.fromRGB(255, 255, 255)
+TitleBar.TextXAlignment = Enum.TextXAlignment.Left
+TitleBar.Font = Enum.Font.SourceSansBold
+TitleBar.TextSize = 14
+TitleBar.BorderSizePixel = 0
+TitleBar.Parent = MainFrame
+
+local TitleCorner = Instance.new("UICorner")
+TitleCorner.CornerRadius = UDim.new(0, 10)
+TitleCorner.Parent = TitleBar
+
+local MinBtn = Instance.new("TextButton")
+MinBtn.Size = UDim2.new(0, 35, 0, 35)
+MinBtn.Position = UDim2.new(1, -35, 0, 0)
+MinBtn.BackgroundTransparency = 1
+MinBtn.Text = "−"
+MinBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+MinBtn.TextSize = 22
+MinBtn.Font = Enum.Font.SourceSansBold
+MinBtn.Parent = MainFrame
+
+local ContentFrame = Instance.new("Frame")
+ContentFrame.Size = UDim2.new(1, -16, 1, -45)
+ContentFrame.Position = UDim2.new(0, 8, 0, 40)
+ContentFrame.BackgroundTransparency = 1
+ContentFrame.Parent = MainFrame
+
+local function createMainBtn(text, pos, bgClr)
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(1, 0, 0, 36)
+    btn.Position = pos
+    btn.BackgroundColor3 = bgClr
+    btn.Text = text
+    btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    btn.Font = Enum.Font.SourceSansBold
+    btn.TextSize = 14
+    btn.Parent = ContentFrame
+    
+    local c = Instance.new("UICorner")
+    c.CornerRadius = UDim.new(0, 6)
+    c.Parent = btn
+    return btn
+end
+
+local EatOnlyBtn = createMainBtn("Auto Eat: OFF", UDim2.new(0, 0, 0, 0), Color3.fromRGB(150, 40, 40))
+local FarmBtn = createMainBtn("Auto Farm: OFF", UDim2.new(0, 0, 0, 42), Color3.fromRGB(150, 40, 40))
+local PlatformBtn = createMainBtn("Tạo Nền Tảng: OFF", UDim2.new(0, 0, 0, 84), Color3.fromRGB(150, 40, 40))
+local SpeedTogglePopBtn = createMainBtn("⚡ SPEED MENU (MỞ/ĐÓNG)", UDim2.new(0, 0, 0, 126), Color3.fromRGB(40, 100, 160))
+
+local isMainMinimized = false
+MinBtn.MouseButton1Click:Connect(function()
+    isMainMinimized = not isMainMinimized
+    if isMainMinimized then
+        ContentFrame.Visible = false
+        MainFrame:TweenSize(UDim2.new(0, 260, 0, 35), "Out", "Quad", 0.15, true)
+        MinBtn.Text = "+"
+    else
+        MainFrame:TweenSize(UDim2.new(0, 260, 0, 230), "Out", "Quad", 0.15, true)
+        task.wait(0.15)
+        ContentFrame.Visible = true
+        MinBtn.Text = "−"
+    end
+end)
+
+-- 2. TẠO BẢNG SPEED ĐỘC LẬP (SPEED POPUP MATRIX)
+local SpeedFrame = Instance.new("Frame")
+SpeedFrame.Name = "SpeedFrame"
+SpeedFrame.Size = UDim2.new(0, 260, 0, 250)
+SpeedFrame.Position = UDim2.new(0.1, 270, 0.25, 0)
+SpeedFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+SpeedFrame.BorderSizePixel = 0
+SpeedFrame.Active = true
+SpeedFrame.Draggable = true
+SpeedFrame.Visible = false
+SpeedFrame.Parent = ScreenGui
+
+local SpeedCorner = Instance.new("UICorner")
+SpeedCorner.CornerRadius = UDim.new(0, 10)
+SpeedCorner.Parent = SpeedFrame
+
+local SpeedTitleBar = Instance.new("TextLabel")
+SpeedTitleBar.Size = UDim2.new(1, 0, 0, 35)
+SpeedTitleBar.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+SpeedTitleBar.Text = "   ⚡ SPEED MATRIX (ĐỘC LẬP)"
+SpeedTitleBar.TextColor3 = Color3.fromRGB(255, 198, 84)
+SpeedTitleBar.TextXAlignment = Enum.TextXAlignment.Left
+SpeedTitleBar.Font = Enum.Font.SourceSansBold
+SpeedTitleBar.TextSize = 13
+SpeedTitleBar.BorderSizePixel = 0
+SpeedTitleBar.Parent = SpeedFrame
+
+local SpeedTitleCorner = Instance.new("UICorner")
+SpeedTitleCorner.CornerRadius = UDim.new(0, 10)
+SpeedTitleCorner.Parent = SpeedTitleBar
+
+local SpeedContainer = Instance.new("Frame")
+SpeedContainer.Size = UDim2.new(1, -16, 1, -45)
+SpeedContainer.Position = UDim2.new(0, 8, 0, 40)
+SpeedContainer.BackgroundTransparency = 1
+SpeedContainer.Parent = SpeedFrame
+
+local SpeedGrid = Instance.new("UIGridLayout")
+SpeedGrid.CellSize = UDim2.new(0, 56, 0, 40)
+SpeedGrid.CellPadding = UDim2.new(0, 6, 0, 6)
+SpeedGrid.Parent = SpeedContainer
+
+SpeedTogglePopBtn.MouseButton1Click:Connect(function()
+    SpeedFrame.Visible = not SpeedFrame.Visible
+end)
+
+-- 3. HỆ THỐNG CƯỠNG ÉP SPEED (SPEED ENGINE)
+local TargetSpeed = 16
+local AntiReset = false
+
+local function ForceSpeed(speed)
+    local p = Player
+    if not p.Character then return end
+    
+    local humanoid = p.Character:FindFirstChildOfClass("Humanoid")
+    if humanoid then
+        pcall(function() humanoid.WalkSpeed = speed end)
+    end
+    
+    pcall(function()
+        for _, v in ipairs(p.Character:GetDescendants()) do
+            if v:IsA("NumberValue") or v:IsA("IntValue") then
+                local name = string.lower(v.Name)
+                if string.find(name, "speed") or string.find(name, "walk") or string.find(name, "run") then
+                    v.Value = speed
+                end
+            end
+        end
+    end)
+end
+
+task.spawn(function()
+    while true do
+        if AntiReset and TargetSpeed ~= 16 then 
+            ForceSpeed(TargetSpeed) 
+        end
+        task.wait(0.02)
+    end
+end)
+
+Player.CharacterAdded:Connect(function()
+    task.wait(0.5)
+    if AntiReset and TargetSpeed ~= 16 then
+        ForceSpeed(TargetSpeed)
+    end
+end)
+
+local speeds = {100, 200, 400, 500, 600, 800, 1000, 1500}
+
+for _, sp in ipairs(speeds) do
+    local Btn = Instance.new("TextButton")
+    Btn.BackgroundColor3 = Color3.fromRGB(40, 43, 48)
+    Btn.Text = tostring(sp)
+    Btn.TextColor3 = Color3.fromRGB(255, 198, 84)
+    Btn.Font = Enum.Font.SourceSansBold
+    Btn.TextSize = 15
+    Btn.BorderSizePixel = 0
+    Btn.Parent = SpeedContainer
+    
+    local btnCorner = Instance.new("UICorner")
+    btnCorner.CornerRadius = UDim.new(0, 6)
+    btnCorner.Parent = Btn
+
+    Btn.MouseButton1Click:Connect(function()
+        TargetSpeed = sp
+        ForceSpeed(sp)
+    end)
+end
+
+local ResetBtn = Instance.new("TextButton")
+ResetBtn.BackgroundColor3 = Color3.fromRGB(150, 40, 40)
+ResetBtn.Text = "GỐC"
+ResetBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+ResetBtn.Font = Enum.Font.SourceSansBold
+ResetBtn.TextSize = 13
+ResetBtn.Parent = SpeedContainer
+
+local rCorner = Instance.new("UICorner")
+rCorner.CornerRadius = UDim.new(0, 6)
+rCorner.Parent = ResetBtn
+
+ResetBtn.MouseButton1Click:Connect(function()
+    TargetSpeed = 16
+    AntiReset = false
+    ForceSpeed(16)
+end)
+
+local ToggleSpeedBtn = Instance.new("TextButton")
+ToggleSpeedBtn.BackgroundColor3 = Color3.fromRGB(40, 100, 40)
+ToggleSpeedBtn.Text = "KHÓA"
+ToggleSpeedBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+ToggleSpeedBtn.Font = Enum.Font.SourceSansBold
+ToggleSpeedBtn.TextSize = 13
+ToggleSpeedBtn.Parent = SpeedContainer
+
+local tCorner = Instance.new("UICorner")
+tCorner.CornerRadius = UDim.new(0, 6)
+tCorner.Parent = ToggleSpeedBtn
+
+ToggleSpeedBtn.MouseButton1Click:Connect(function()
+    AntiReset = not AntiReset
+    if AntiReset then
+        ToggleSpeedBtn.BackgroundColor3 = Color3.fromRGB(0, 180, 0)
+        ToggleSpeedBtn.Text = "ĐÃ KHÓA"
+        ForceSpeed(TargetSpeed)
+    else
+        ToggleSpeedBtn.BackgroundColor3 = Color3.fromRGB(40, 100, 40)
+        ToggleSpeedBtn.Text = "KHÓA"
+    end
+end)
+
+-- 4. LOGIC TẠO NỀN TẢNG (GRID SYSTEM)
+local tileSize = 50
+local renderDistance = 3
+local spawnedTiles = {}
+
+local function createTile(x, z)
+    local key = x .. "," .. z
+    if spawnedTiles[key] then return end
+    
+    local part = Instance.new("Part")
+    part.Size = Vector3.new(tileSize, 1, tileSize)
+    part.Position = Vector3.new(x * tileSize, 0, z * tileSize)
+    part.Anchored = true
+    part.Material = Enum.Material.Grass
+    part.Parent = workspace
+    
+    spawnedTiles[key] = true
+end
+
+RunService.RenderStepped:Connect(function()
+    if not _G.PlatformEnabled then return end
+
+    local char = Player.Character
+    if char then
+        local root = char:FindFirstChild("HumanoidRootPart")
+        if root then
+            local pos = root.Position
+            local currentX = math.floor(pos.X / tileSize)
+            local currentZ = math.floor(pos.Z / tileSize)
+
+            for x = currentX - renderDistance, currentX + renderDistance do
+                for z = currentZ - renderDistance, currentZ + renderDistance do
+                    createTile(x, z)
+                end
+            end
+        end
+    end
+end)
+
+PlatformBtn.MouseButton1Click:Connect(function()
+    _G.PlatformEnabled = not _G.PlatformEnabled
+    if _G.PlatformEnabled then
+        PlatformBtn.BackgroundColor3 = Color3.fromRGB(40, 150, 40)
+        PlatformBtn.Text = "Tạo Nền Tảng: ON"
+    else
+        PlatformBtn.BackgroundColor3 = Color3.fromRGB(150, 40, 40)
+        PlatformBtn.Text = "Tạo Nền Tảng: OFF"
+    end
+end)
+
+-- 5. LOGIC AUTO EAT & AUTO FARM
+EatOnlyBtn.MouseButton1Click:Connect(function()
+    _G.AutoEatOnly = not _G.AutoEatOnly
+    if _G.AutoEatOnly then
+        _G.AutoFarm = false
+        FarmBtn.BackgroundColor3 = Color3.fromRGB(150, 40, 40)
+        FarmBtn.Text = "Auto Farm: OFF"
+        
+        EatOnlyBtn.BackgroundColor3 = Color3.fromRGB(40, 150, 40)
+        EatOnlyBtn.Text = "Auto Eat: ON"
+    else
+        EatOnlyBtn.BackgroundColor3 = Color3.fromRGB(150, 40, 40)
+        EatOnlyBtn.Text = "Auto Eat: OFF"
+    end
+end)
+
+FarmBtn.MouseButton1Click:Connect(function()
+    _G.AutoFarm = not _G.AutoFarm
+    if _G.AutoFarm then
+        _G.AutoEatOnly = false
+        EatOnlyBtn.BackgroundColor3 = Color3.fromRGB(150, 40, 40)
+        EatOnlyBtn.Text = "Auto Eat: OFF"
+        
+        FarmBtn.BackgroundColor3 = Color3.fromRGB(40, 150, 40)
+        FarmBtn.Text = "Auto Farm: ON"
+        _G.CurrentState = "EATING"
+        stateStartTime = tick()
+    else
+        FarmBtn.BackgroundColor3 = Color3.fromRGB(150, 40, 40)
+        FarmBtn.Text = "Auto Farm: OFF"
+    end
+end)
+
+local function smartClick(keywords)
+    for _, gui in pairs(PlayerGui:GetChildren()) do
+        if gui:IsA("ScreenGui") and gui.Name ~= "UniversalSpeedGridMenu" then
+            for _, btn in pairs(gui:GetDescendants()) do
+                if (btn:IsA("TextButton") or btn:IsA("ImageButton")) and btn.Visible then
+                    local text = btn:IsA("TextButton") and btn.Text:lower() or ""
+                    local name = btn.Name:lower()
+                    for _, key in ipairs(keywords) do
+                        if text:find(key) or name:find(key) then
+                            pcall(function()
+                                for _, event in pairs({"MouseButton1Click", "MouseButton1Down", "Activated"}) do
+                                    for _, signal in pairs(getconnections(btn[event])) do signal:Fire() end
+                                end
+                            end)
+                            return true
+                        end
+                    end
+                end
+            end
+        end
+    end
+    return false
+end
+
+local function triggerSellRemote()
+    for _, obj in pairs(game:GetDescendants()) do
+        if obj:IsA("RemoteEvent") or obj:IsA("RemoteFunction") then
+            local name = obj.Name:lower()
+            if name:find("sell") or name:find("ban") then
+                pcall(function()
+                    if obj:IsA("RemoteEvent") then obj:FireServer()
+                    else obj:InvokeServer() end
+                end)
+            end
+        end
+    end
+end
+
+local function doFastEat()
+    local char = Player.Character
+    local tool = char and (char:FindFirstChildOfClass("Tool") or Player.Backpack:FindFirstChildOfClass("Tool"))
+    if tool then
+        if tool.Parent == Player.Backpack then tool.Parent = char end
+        tool:Activate()
+    end
+    for _ = 1, 5 do
+        VirtualInputManager:SendMouseButtonEvent(0, 0, 0, true, game, 0)
+        VirtualInputManager:SendMouseButtonEvent(0, 0, 0, false, game, 0)
+    end
+end
+
+task.spawn(function()
+    while true do
+        task.wait(0.01)
+        
+        if _G.AutoEatOnly then
+            doFastEat()
+        elseif _G.AutoFarm then
+            if _G.CurrentState == "EATING" then
+                doFastEat()
+
+                if tick() - stateStartTime >= FORCED_TIME then
+                    _G.CurrentState = "SELLING"
+                end
+
+            elseif _G.CurrentState == "SELLING" then
+                smartClick({"sell", "bán", "sellall"})
+                triggerSellRemote()
+                task.wait(1)
+                _G.CurrentState = "CHANGING"
+
+            elseif _G.CurrentState == "CHANGING" then
+                smartClick({"menu", "option", "setting", "three"})
+                task.wait(0.5)
+                smartClick({"skip", "next", "chuyển", "teleport", "world"})
+                task.wait(0.5)
+                smartClick({"skip", "confirm", "yes", "đồng ý", "ok"})
+                task.wait(1)
+
+                stateStartTime = tick()
+                _G.CurrentState = "EATING"
+            end
+        end
+    end
+end)

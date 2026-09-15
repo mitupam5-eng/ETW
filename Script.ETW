@@ -1,4 +1,4 @@
--- Eat The World - Full Integrated Script (With View Data UI Toggle)
+-- Eat The World - Simplified Auto Eat, Platform, Speed & View Data (Console)
 repeat task.wait() until game:IsLoaded()
 
 local Players = game:GetService("Players")
@@ -14,13 +14,88 @@ if CoreGui:FindFirstChild("UniversalSpeedGridMenu") then
 end
 
 _G.AutoEatOnly = false
-_G.AutoFarm = false
 _G.PlatformEnabled = false
-_G.ViewDataEnabled = false
-_G.CurrentState = "EATING"
 
-local FORCED_TIME = 210
-local stateStartTime = tick()
+-- ==========================================
+-- HỆ THỐNG VIEW DATA LOGIC (IN VÀO F9 CONSOLE)
+-- ==========================================
+local localization = {
+    MaxSize = "MaxSize",
+    Speed = "Speed",
+    Multiplier = "Multiplier",
+    EatSpeed = "EatSpeed",
+}
+
+local function sizeGrowth(level) return math.floor(((level + 0.5) ^ 2 - 0.25) / 2 * 100) end
+local function speedGrowth(level) return math.floor(level * 2 + 10) end
+local function multiplierGrowth(level) return math.floor(level) end
+local function eatSpeedGrowth(level) return math.floor((1 + (level - 1) * 0.2) * 10) / 10 end
+
+local function sizePrice(level) return math.floor(level ^ 3 / 2) * 20 end
+local function speedPrice(level) return math.floor((level * 3) ^ 3 / 200) * 1000 end
+local function multiplierPrice(level) return math.floor((level * 10) ^ 3 / 200) * 1000 end
+local function eatSpeedPrice(level) return math.floor((level * 10) ^ 3 / 200) * 2000 end
+
+local growthFunctions = { MaxSize = sizeGrowth, Speed = speedGrowth, Multiplier = multiplierGrowth, EatSpeed = eatSpeedGrowth }
+local priceFunctions = { MaxSize = sizePrice, Speed = speedPrice, Multiplier = multiplierPrice, EatSpeed = eatSpeedPrice }
+
+local function showPlayerData()
+    print("=======================================")
+    print("Viewing player data")
+    print("=======================================")
+
+    for _, player in ipairs(Players:GetPlayers()) do
+        print("")
+        print("Player: " .. player.Name)
+        print("=======================================")
+
+        local hasUpgrades = false
+        local upgrades = player:FindFirstChild("Upgrades")
+
+        if upgrades then
+            for _, upg in ipairs(upgrades:GetChildren()) do
+                local growthFunction = growthFunctions[upg.Name]
+                local priceFunction = priceFunctions[upg.Name]
+
+                if growthFunction and priceFunction and tonumber(upg.Value) then
+                    hasUpgrades = true
+                    local level = tonumber(upg.Value)
+                    local cost = 0
+
+                    for l = 2, level do cost += priceFunction(l) end
+
+                    local content =
+                        "  " ..
+                        localization[upg.Name] ..
+                        ": " ..
+                        level ..
+                        " level; " ..
+                        growthFunction(level) ..
+                        " value; " ..
+                        cost ..
+                        " cost"
+
+                    print(content)
+                else
+                    hasUpgrades = true
+                    print("  " .. upg.Name .. ": " .. tostring(upg.Value))
+                end
+            end
+        end
+
+        if not hasUpgrades then
+            print("  No upgrade data available at the moment")
+        end
+    end
+
+    print("=======================================")
+    print("Data viewing completed")
+    print("=======================================")
+
+    pcall(function()
+        game:GetService("StarterGui"):SetCore("DevConsoleVisible", true)
+    end)
+end
 
 -- ==========================================
 -- 1. TẠO KHUNG CHÍNH UI (MAIN MENU)
@@ -32,7 +107,7 @@ ScreenGui.ResetOnSpawn = false
 
 local MainFrame = Instance.new("Frame")
 MainFrame.Name = "MainFrame"
-MainFrame.Size = UDim2.new(0, 260, 0, 275)
+MainFrame.Size = UDim2.new(0, 260, 0, 230)
 MainFrame.Position = UDim2.new(0.05, 0, 0.2, 0)
 MainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
 MainFrame.BorderSizePixel = 0
@@ -47,7 +122,7 @@ Corner.Parent = MainFrame
 local TitleBar = Instance.new("TextLabel")
 TitleBar.Size = UDim2.new(1, 0, 0, 35)
 TitleBar.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-TitleBar.Text = "   ETW - ULTIMATE FARM"
+TitleBar.Text = "   ETW - MENU"
 TitleBar.TextColor3 = Color3.fromRGB(255, 255, 255)
 TitleBar.TextXAlignment = Enum.TextXAlignment.Left
 TitleBar.Font = Enum.Font.SourceSansBold
@@ -93,10 +168,9 @@ local function createMainBtn(text, pos, bgClr)
 end
 
 local EatOnlyBtn = createMainBtn("Auto Eat: OFF", UDim2.new(0, 0, 0, 0), Color3.fromRGB(150, 40, 40))
-local FarmBtn = createMainBtn("Auto Farm: OFF", UDim2.new(0, 0, 0, 42), Color3.fromRGB(150, 40, 40))
-local PlatformBtn = createMainBtn("Tạo Nền Tảng: OFF", UDim2.new(0, 0, 0, 84), Color3.fromRGB(150, 40, 40))
-local SpeedTogglePopBtn = createMainBtn("⚡ SPEED MENU (MỞ/ĐÓNG)", UDim2.new(0, 0, 0, 126), Color3.fromRGB(40, 100, 160))
-local ViewDataBtn = createMainBtn("👁️ View Data: OFF", UDim2.new(0, 0, 0, 168), Color3.fromRGB(150, 40, 40))
+local PlatformBtn = createMainBtn("Tạo Nền Tảng: OFF", UDim2.new(0, 0, 0, 42), Color3.fromRGB(150, 40, 40))
+local SpeedTogglePopBtn = createMainBtn("⚡ SPEED MENU (MỞ/ĐÓNG)", UDim2.new(0, 0, 0, 84), Color3.fromRGB(40, 100, 160))
+local ViewDataBtn = createMainBtn("👁️ VIEW DATA (IN XUỐNG F9)", UDim2.new(0, 0, 0, 126), Color3.fromRGB(120, 40, 160))
 
 local isMainMinimized = false
 MinBtn.MouseButton1Click:Connect(function()
@@ -106,142 +180,24 @@ MinBtn.MouseButton1Click:Connect(function()
         MainFrame:TweenSize(UDim2.new(0, 260, 0, 35), "Out", "Quad", 0.15, true)
         MinBtn.Text = "+"
     else
-        MainFrame:TweenSize(UDim2.new(0, 260, 0, 275), "Out", "Quad", 0.15, true)
+        MainFrame:TweenSize(UDim2.new(0, 260, 0, 230), "Out", "Quad", 0.15, true)
         task.wait(0.15)
         ContentFrame.Visible = true
         MinBtn.Text = "−"
     end
 end)
 
--- ==========================================
--- 2. TẠO BẢNG HIỂN THỊ VIEW DATA TRỰC TIẾP TRÊN UI
--- ==========================================
-local DataFrame = Instance.new("Frame")
-DataFrame.Name = "DataFrame"
-DataFrame.Size = UDim2.new(0, 320, 0, 300)
-DataFrame.Position = UDim2.new(0.05, 270, 0.2, 0)
-DataFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
-DataFrame.BorderSizePixel = 0
-DataFrame.Active = true
-DataFrame.Draggable = true
-DataFrame.Visible = false
-DataFrame.Parent = ScreenGui
-
-local DataCorner = Instance.new("UICorner")
-DataCorner.CornerRadius = UDim.new(0, 10)
-DataCorner.Parent = DataFrame
-
-local DataTitle = Instance.new("TextLabel")
-DataTitle.Size = UDim2.new(1, 0, 0, 35)
-DataTitle.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
-DataTitle.Text = "   👁️ PLAYER DATA VIEW"
-DataTitle.TextColor3 = Color3.fromRGB(200, 130, 255)
-DataTitle.TextXAlignment = Enum.TextXAlignment.Left
-DataTitle.Font = Enum.Font.SourceSansBold
-DataTitle.TextSize = 14
-DataTitle.BorderSizePixel = 0
-DataTitle.Parent = DataFrame
-
-local DataTitleCorner = Instance.new("UICorner")
-DataTitleCorner.CornerRadius = UDim.new(0, 10)
-DataTitleCorner.Parent = DataTitle
-
-local ScrollView = Instance.new("ScrollingFrame")
-ScrollView.Size = UDim2.new(1, -16, 1, -45)
-ScrollView.Position = UDim2.new(0, 8, 0, 40)
-ScrollView.BackgroundTransparency = 1
-ScrollView.CanvasSize = UDim2.new(0, 0, 0, 0)
-ScrollView.ScrollBarThickness = 4
-ScrollView.Parent = DataFrame
-
-local DataText = Instance.new("TextLabel")
-DataText.Size = UDim2.new(1, -10, 0, 0)
-DataText.Position = UDim2.new(0, 5, 0, 5)
-DataText.BackgroundTransparency = 1
-DataText.TextColor3 = Color3.fromRGB(220, 220, 220)
-DataText.Font = Enum.Font.Code
-DataText.TextSize = 12
-DataText.TextXAlignment = Enum.TextXAlignment.Left
-DataText.TextYAlignment = Enum.TextYAlignment.Top
-DataText.Parent = ScrollView
-
--- LOGIC TÍNH TOÁN DATA
-local function sizeGrowth(level) return math.floor(((level + 0.5) ^ 2 - 0.25) / 2 * 100) end
-local function speedGrowth(level) return math.floor(level * 2 + 10) end
-local function multiplierGrowth(level) return math.floor(level) end
-local function eatSpeedGrowth(level) return math.floor((1 + (level - 1) * 0.2) * 10) / 10 end
-
-local function sizePrice(level) return math.floor(level ^ 3 / 2) * 20 end
-local function speedPrice(level) return math.floor((level * 3) ^ 3 / 200) * 1000 end
-local function multiplierPrice(level) return math.floor((level * 10) ^ 3 / 200) * 1000 end
-local function eatSpeedPrice(level) return math.floor((level * 10) ^ 3 / 200) * 2000 end
-
-local growthFunctions = { MaxSize = sizeGrowth, Speed = speedGrowth, Multiplier = multiplierGrowth, EatSpeed = eatSpeedGrowth }
-local priceFunctions = { MaxSize = sizePrice, Speed = speedPrice, Multiplier = multiplierPrice, EatSpeed = eatSpeedPrice }
-
-local function updateDataUI()
-    local str = ""
-    for _, player in ipairs(Players:GetPlayers()) do
-        str = str .. "👤 Player: " .. player.Name .. "\n"
-        local upgrades = player:FindFirstChild("Upgrades")
-        local hasUpg = false
-        if upgrades then
-            for _, upg in ipairs(upgrades:GetChildren()) do
-                local gFunc = growthFunctions[upg.Name]
-                local pFunc = priceFunctions[upg.Name]
-                if gFunc and pFunc and tonumber(upg.Value) then
-                    hasUpg = true
-                    local lvl = tonumber(upg.Value)
-                    local cost = 0
-                    for l = 2, lvl do cost = cost + pFunc(l) end
-                    str = str .. string.format("  • %s: Lvl %d | Val: %s | Cost: %s\n", upg.Name, lvl, tostring(gFunc(lvl)), tostring(cost))
-                else
-                    hasUpg = true
-                    str = str .. string.format("  • %s: %s\n", upg.Name, tostring(upg.Value))
-                end
-            end
-        end
-        if not hasUpg then str = str .. "  (Không có dữ liệu)\n" end
-        str = str .. "-----------------------------------\n"
-    end
-    DataText.Text = str
-    
-    -- Tự động căn chỉnh độ cao thanh cuộn
-    local textSize = game:GetService("TextService"):GetTextSize(str, 12, Enum.Font.Code, Vector3.new(300, 10000, 0))
-    DataText.Size = UDim2.new(1, -10, 0, textSize.Y + 20)
-    ScrollView.CanvasSize = UDim2.new(0, 0, 0, textSize.Y + 30)
-end
-
--- Vòng lặp tự động cập nhật Data UI khi được Bật
-task.spawn(function()
-    while true do
-        if _G.ViewDataEnabled then
-            pcall(updateDataUI)
-        end
-        task.wait(2)
-    end
-end)
-
 ViewDataBtn.MouseButton1Click:Connect(function()
-    _G.ViewDataEnabled = not _G.ViewDataEnabled
-    DataFrame.Visible = _G.ViewDataEnabled
-    if _G.ViewDataEnabled then
-        ViewDataBtn.BackgroundColor3 = Color3.fromRGB(40, 150, 40)
-        ViewDataBtn.Text = "👁️ View Data: ON"
-        updateDataUI()
-    else
-        ViewDataBtn.BackgroundColor3 = Color3.fromRGB(150, 40, 40)
-        ViewDataBtn.Text = "👁️ View Data: OFF"
-    end
+    showPlayerData()
 end)
 
 -- ==========================================
--- 3. TẠO BẢNG SPEED ĐỘC LẬP (SPEED POPUP MATRIX)
+-- 2. TẠO BẢNG SPEED ĐỘC LẬP (SPEED POPUP MATRIX)
 -- ==========================================
 local SpeedFrame = Instance.new("Frame")
 SpeedFrame.Name = "SpeedFrame"
 SpeedFrame.Size = UDim2.new(0, 260, 0, 250)
-SpeedFrame.Position = UDim2.new(0.05, 600, 0.2, 0)
+SpeedFrame.Position = UDim2.new(0.05, 270, 0.2, 0)
 SpeedFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
 SpeedFrame.BorderSizePixel = 0
 SpeedFrame.Active = true
@@ -284,7 +240,7 @@ SpeedTogglePopBtn.MouseButton1Click:Connect(function()
 end)
 
 -- ==========================================
--- 4. HỆ THỐNG CƯỠNG ÉP SPEED (SPEED ENGINE)
+-- 3. HỆ THỐNG CƯỠNG ÉP SPEED (SPEED ENGINE)
 -- ==========================================
 local TargetSpeed = 16
 local AntiReset = false
@@ -391,7 +347,7 @@ ToggleSpeedBtn.MouseButton1Click:Connect(function()
 end)
 
 -- ==========================================
--- 5. LOGIC TẠO NỀN TẢNG (GRID SYSTEM)
+-- 4. LOGIC TẠO NỀN TẢNG (GRID SYSTEM)
 -- ==========================================
 local tileSize = 50
 local renderDistance = 3
@@ -443,15 +399,11 @@ PlatformBtn.MouseButton1Click:Connect(function()
 end)
 
 -- ==========================================
--- 6. LOGIC AUTO EAT & AUTO FARM
+-- 5. LOGIC AUTO EAT ONLY
 -- ==========================================
 EatOnlyBtn.MouseButton1Click:Connect(function()
     _G.AutoEatOnly = not _G.AutoEatOnly
     if _G.AutoEatOnly then
-        _G.AutoFarm = false
-        FarmBtn.BackgroundColor3 = Color3.fromRGB(150, 40, 40)
-        FarmBtn.Text = "Auto Farm: OFF"
-        
         EatOnlyBtn.BackgroundColor3 = Color3.fromRGB(40, 150, 40)
         EatOnlyBtn.Text = "Auto Eat: ON"
     else
@@ -459,61 +411,6 @@ EatOnlyBtn.MouseButton1Click:Connect(function()
         EatOnlyBtn.Text = "Auto Eat: OFF"
     end
 end)
-
-FarmBtn.MouseButton1Click:Connect(function()
-    _G.AutoFarm = not _G.AutoFarm
-    if _G.AutoFarm then
-        _G.AutoEatOnly = false
-        EatOnlyBtn.BackgroundColor3 = Color3.fromRGB(150, 40, 40)
-        EatOnlyBtn.Text = "Auto Eat: OFF"
-        
-        FarmBtn.BackgroundColor3 = Color3.fromRGB(40, 150, 40)
-        FarmBtn.Text = "Auto Farm: ON"
-        _G.CurrentState = "EATING"
-        stateStartTime = tick()
-    else
-        FarmBtn.BackgroundColor3 = Color3.fromRGB(150, 40, 40)
-        FarmBtn.Text = "Auto Farm: OFF"
-    end
-end)
-
-local function smartClick(keywords)
-    for _, gui in pairs(PlayerGui:GetChildren()) do
-        if gui:IsA("ScreenGui") and gui.Name ~= "UniversalSpeedGridMenu" then
-            for _, btn in pairs(gui:GetDescendants()) do
-                if (btn:IsA("TextButton") or btn:IsA("ImageButton")) and btn.Visible then
-                    local text = btn:IsA("TextButton") and btn.Text:lower() or ""
-                    local name = btn.Name:lower()
-                    for _, key in ipairs(keywords) do
-                        if text:find(key) or name:find(key) then
-                            pcall(function()
-                                for _, event in pairs({"MouseButton1Click", "MouseButton1Down", "Activated"}) do
-                                    for _, signal in pairs(getconnections(btn[event])) do signal:Fire() end
-                                end
-                            end)
-                            return true
-                        end
-                    end
-                end
-            end
-        end
-    end
-    return false
-end
-
-local function triggerSellRemote()
-    for _, obj in pairs(game:GetDescendants()) do
-        if obj:IsA("RemoteEvent") or obj:IsA("RemoteFunction") then
-            local name = obj.Name:lower()
-            if name:find("sell") or name:find("ban") then
-                pcall(function()
-                    if obj:IsA("RemoteEvent") then obj:FireServer()
-                    else obj:InvokeServer() end
-                end)
-            end
-        end
-    end
-end
 
 local function doFastEat()
     local char = Player.Character
@@ -531,34 +428,8 @@ end
 task.spawn(function()
     while true do
         task.wait(0.01)
-        
         if _G.AutoEatOnly then
             doFastEat()
-        elseif _G.AutoFarm then
-            if _G.CurrentState == "EATING" then
-                doFastEat()
-
-                if tick() - stateStartTime >= FORCED_TIME then
-                    _G.CurrentState = "SELLING"
-                end
-
-            elseif _G.CurrentState == "SELLING" then
-                smartClick({"sell", "bán", "sellall"})
-                triggerSellRemote()
-                task.wait(1)
-                _G.CurrentState = "CHANGING"
-
-            elseif _G.CurrentState == "CHANGING" then
-                smartClick({"menu", "option", "setting", "three"})
-                task.wait(0.5)
-                smartClick({"skip", "next", "chuyển", "teleport", "world"})
-                task.wait(0.5)
-                smartClick({"skip", "confirm", "yes", "đồng ý", "ok"})
-                task.wait(1)
-
-                stateStartTime = tick()
-                _G.CurrentState = "EATING"
-            end
         end
     end
 end)

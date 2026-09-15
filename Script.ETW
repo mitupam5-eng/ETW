@@ -1,4 +1,4 @@
--- Eat The World - Loadstring Optimized Version
+-- Eat The World - Full Integrated Script (With View Data UI Toggle)
 repeat task.wait() until game:IsLoaded()
 
 local Players = game:GetService("Players")
@@ -8,7 +8,7 @@ local CoreGui = game:GetService("CoreGui")
 local VirtualInputManager = game:GetService("VirtualInputManager")
 local RunService = game:GetService("RunService")
 
--- Xóa GUI cũ để tránh trùng lặp khi re-execute loadstring
+-- Xóa GUI cũ để tránh trùng lặp
 if CoreGui:FindFirstChild("UniversalSpeedGridMenu") then
     CoreGui.UniversalSpeedGridMenu:Destroy()
 end
@@ -16,12 +16,15 @@ end
 _G.AutoEatOnly = false
 _G.AutoFarm = false
 _G.PlatformEnabled = false
+_G.ViewDataEnabled = false
 _G.CurrentState = "EATING"
 
 local FORCED_TIME = 210
 local stateStartTime = tick()
 
+-- ==========================================
 -- 1. TẠO KHUNG CHÍNH UI (MAIN MENU)
+-- ==========================================
 local ScreenGui = Instance.new("ScreenGui")
 ScreenGui.Name = "UniversalSpeedGridMenu"
 ScreenGui.Parent = CoreGui
@@ -29,8 +32,8 @@ ScreenGui.ResetOnSpawn = false
 
 local MainFrame = Instance.new("Frame")
 MainFrame.Name = "MainFrame"
-MainFrame.Size = UDim2.new(0, 260, 0, 230)
-MainFrame.Position = UDim2.new(0.1, 0, 0.25, 0)
+MainFrame.Size = UDim2.new(0, 260, 0, 275)
+MainFrame.Position = UDim2.new(0.05, 0, 0.2, 0)
 MainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
 MainFrame.BorderSizePixel = 0
 MainFrame.Active = true
@@ -93,6 +96,7 @@ local EatOnlyBtn = createMainBtn("Auto Eat: OFF", UDim2.new(0, 0, 0, 0), Color3.
 local FarmBtn = createMainBtn("Auto Farm: OFF", UDim2.new(0, 0, 0, 42), Color3.fromRGB(150, 40, 40))
 local PlatformBtn = createMainBtn("Tạo Nền Tảng: OFF", UDim2.new(0, 0, 0, 84), Color3.fromRGB(150, 40, 40))
 local SpeedTogglePopBtn = createMainBtn("⚡ SPEED MENU (MỞ/ĐÓNG)", UDim2.new(0, 0, 0, 126), Color3.fromRGB(40, 100, 160))
+local ViewDataBtn = createMainBtn("👁️ View Data: OFF", UDim2.new(0, 0, 0, 168), Color3.fromRGB(150, 40, 40))
 
 local isMainMinimized = false
 MinBtn.MouseButton1Click:Connect(function()
@@ -102,18 +106,142 @@ MinBtn.MouseButton1Click:Connect(function()
         MainFrame:TweenSize(UDim2.new(0, 260, 0, 35), "Out", "Quad", 0.15, true)
         MinBtn.Text = "+"
     else
-        MainFrame:TweenSize(UDim2.new(0, 260, 0, 230), "Out", "Quad", 0.15, true)
+        MainFrame:TweenSize(UDim2.new(0, 260, 0, 275), "Out", "Quad", 0.15, true)
         task.wait(0.15)
         ContentFrame.Visible = true
         MinBtn.Text = "−"
     end
 end)
 
--- 2. TẠO BẢNG SPEED ĐỘC LẬP (SPEED POPUP MATRIX)
+-- ==========================================
+-- 2. TẠO BẢNG HIỂN THỊ VIEW DATA TRỰC TIẾP TRÊN UI
+-- ==========================================
+local DataFrame = Instance.new("Frame")
+DataFrame.Name = "DataFrame"
+DataFrame.Size = UDim2.new(0, 320, 0, 300)
+DataFrame.Position = UDim2.new(0.05, 270, 0.2, 0)
+DataFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+DataFrame.BorderSizePixel = 0
+DataFrame.Active = true
+DataFrame.Draggable = true
+DataFrame.Visible = false
+DataFrame.Parent = ScreenGui
+
+local DataCorner = Instance.new("UICorner")
+DataCorner.CornerRadius = UDim.new(0, 10)
+DataCorner.Parent = DataFrame
+
+local DataTitle = Instance.new("TextLabel")
+DataTitle.Size = UDim2.new(1, 0, 0, 35)
+DataTitle.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+DataTitle.Text = "   👁️ PLAYER DATA VIEW"
+DataTitle.TextColor3 = Color3.fromRGB(200, 130, 255)
+DataTitle.TextXAlignment = Enum.TextXAlignment.Left
+DataTitle.Font = Enum.Font.SourceSansBold
+DataTitle.TextSize = 14
+DataTitle.BorderSizePixel = 0
+DataTitle.Parent = DataFrame
+
+local DataTitleCorner = Instance.new("UICorner")
+DataTitleCorner.CornerRadius = UDim.new(0, 10)
+DataTitleCorner.Parent = DataTitle
+
+local ScrollView = Instance.new("ScrollingFrame")
+ScrollView.Size = UDim2.new(1, -16, 1, -45)
+ScrollView.Position = UDim2.new(0, 8, 0, 40)
+ScrollView.BackgroundTransparency = 1
+ScrollView.CanvasSize = UDim2.new(0, 0, 0, 0)
+ScrollView.ScrollBarThickness = 4
+ScrollView.Parent = DataFrame
+
+local DataText = Instance.new("TextLabel")
+DataText.Size = UDim2.new(1, -10, 0, 0)
+DataText.Position = UDim2.new(0, 5, 0, 5)
+DataText.BackgroundTransparency = 1
+DataText.TextColor3 = Color3.fromRGB(220, 220, 220)
+DataText.Font = Enum.Font.Code
+DataText.TextSize = 12
+DataText.TextXAlignment = Enum.TextXAlignment.Left
+DataText.TextYAlignment = Enum.TextYAlignment.Top
+DataText.Parent = ScrollView
+
+-- LOGIC TÍNH TOÁN DATA
+local function sizeGrowth(level) return math.floor(((level + 0.5) ^ 2 - 0.25) / 2 * 100) end
+local function speedGrowth(level) return math.floor(level * 2 + 10) end
+local function multiplierGrowth(level) return math.floor(level) end
+local function eatSpeedGrowth(level) return math.floor((1 + (level - 1) * 0.2) * 10) / 10 end
+
+local function sizePrice(level) return math.floor(level ^ 3 / 2) * 20 end
+local function speedPrice(level) return math.floor((level * 3) ^ 3 / 200) * 1000 end
+local function multiplierPrice(level) return math.floor((level * 10) ^ 3 / 200) * 1000 end
+local function eatSpeedPrice(level) return math.floor((level * 10) ^ 3 / 200) * 2000 end
+
+local growthFunctions = { MaxSize = sizeGrowth, Speed = speedGrowth, Multiplier = multiplierGrowth, EatSpeed = eatSpeedGrowth }
+local priceFunctions = { MaxSize = sizePrice, Speed = speedPrice, Multiplier = multiplierPrice, EatSpeed = eatSpeedPrice }
+
+local function updateDataUI()
+    local str = ""
+    for _, player in ipairs(Players:GetPlayers()) do
+        str = str .. "👤 Player: " .. player.Name .. "\n"
+        local upgrades = player:FindFirstChild("Upgrades")
+        local hasUpg = false
+        if upgrades then
+            for _, upg in ipairs(upgrades:GetChildren()) do
+                local gFunc = growthFunctions[upg.Name]
+                local pFunc = priceFunctions[upg.Name]
+                if gFunc and pFunc and tonumber(upg.Value) then
+                    hasUpg = true
+                    local lvl = tonumber(upg.Value)
+                    local cost = 0
+                    for l = 2, lvl do cost = cost + pFunc(l) end
+                    str = str .. string.format("  • %s: Lvl %d | Val: %s | Cost: %s\n", upg.Name, lvl, tostring(gFunc(lvl)), tostring(cost))
+                else
+                    hasUpg = true
+                    str = str .. string.format("  • %s: %s\n", upg.Name, tostring(upg.Value))
+                end
+            end
+        end
+        if not hasUpg then str = str .. "  (Không có dữ liệu)\n" end
+        str = str .. "-----------------------------------\n"
+    end
+    DataText.Text = str
+    
+    -- Tự động căn chỉnh độ cao thanh cuộn
+    local textSize = game:GetService("TextService"):GetTextSize(str, 12, Enum.Font.Code, Vector3.new(300, 10000, 0))
+    DataText.Size = UDim2.new(1, -10, 0, textSize.Y + 20)
+    ScrollView.CanvasSize = UDim2.new(0, 0, 0, textSize.Y + 30)
+end
+
+-- Vòng lặp tự động cập nhật Data UI khi được Bật
+task.spawn(function()
+    while true do
+        if _G.ViewDataEnabled then
+            pcall(updateDataUI)
+        end
+        task.wait(2)
+    end
+end)
+
+ViewDataBtn.MouseButton1Click:Connect(function()
+    _G.ViewDataEnabled = not _G.ViewDataEnabled
+    DataFrame.Visible = _G.ViewDataEnabled
+    if _G.ViewDataEnabled then
+        ViewDataBtn.BackgroundColor3 = Color3.fromRGB(40, 150, 40)
+        ViewDataBtn.Text = "👁️ View Data: ON"
+        updateDataUI()
+    else
+        ViewDataBtn.BackgroundColor3 = Color3.fromRGB(150, 40, 40)
+        ViewDataBtn.Text = "👁️ View Data: OFF"
+    end
+end)
+
+-- ==========================================
+-- 3. TẠO BẢNG SPEED ĐỘC LẬP (SPEED POPUP MATRIX)
+-- ==========================================
 local SpeedFrame = Instance.new("Frame")
 SpeedFrame.Name = "SpeedFrame"
 SpeedFrame.Size = UDim2.new(0, 260, 0, 250)
-SpeedFrame.Position = UDim2.new(0.1, 270, 0.25, 0)
+SpeedFrame.Position = UDim2.new(0.05, 600, 0.2, 0)
 SpeedFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
 SpeedFrame.BorderSizePixel = 0
 SpeedFrame.Active = true
@@ -155,7 +283,9 @@ SpeedTogglePopBtn.MouseButton1Click:Connect(function()
     SpeedFrame.Visible = not SpeedFrame.Visible
 end)
 
--- 3. HỆ THỐNG CƯỠNG ÉP SPEED (SPEED ENGINE)
+-- ==========================================
+-- 4. HỆ THỐNG CƯỠNG ÉP SPEED (SPEED ENGINE)
+-- ==========================================
 local TargetSpeed = 16
 local AntiReset = false
 
@@ -260,7 +390,9 @@ ToggleSpeedBtn.MouseButton1Click:Connect(function()
     end
 end)
 
--- 4. LOGIC TẠO NỀN TẢNG (GRID SYSTEM)
+-- ==========================================
+-- 5. LOGIC TẠO NỀN TẢNG (GRID SYSTEM)
+-- ==========================================
 local tileSize = 50
 local renderDistance = 3
 local spawnedTiles = {}
@@ -310,7 +442,9 @@ PlatformBtn.MouseButton1Click:Connect(function()
     end
 end)
 
--- 5. LOGIC AUTO EAT & AUTO FARM
+-- ==========================================
+-- 6. LOGIC AUTO EAT & AUTO FARM
+-- ==========================================
 EatOnlyBtn.MouseButton1Click:Connect(function()
     _G.AutoEatOnly = not _G.AutoEatOnly
     if _G.AutoEatOnly then

@@ -1,4 +1,4 @@
--- Eat The World - Simplified Auto Eat, Platform, Speed & View Data (Console)
+-- Eat The World - Full Script (Auto Eat, Platform, Speed Matrix, View Data & Teleport Grab)
 repeat task.wait() until game:IsLoaded()
 
 local Players = game:GetService("Players")
@@ -7,6 +7,7 @@ local PlayerGui = Player:WaitForChild("PlayerGui")
 local CoreGui = game:GetService("CoreGui")
 local VirtualInputManager = game:GetService("VirtualInputManager")
 local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
 
 -- Xóa GUI cũ để tránh trùng lặp
 if CoreGui:FindFirstChild("UniversalSpeedGridMenu") then
@@ -17,15 +18,229 @@ _G.AutoEatOnly = false
 _G.PlatformEnabled = false
 
 -- ==========================================
--- HỆ THỐNG VIEW DATA LOGIC (IN VÀO F9 CONSOLE)
+-- 1. HỆ THỐNG TELEPORT GRAB LOGIC & UI
 -- ==========================================
-local localization = {
-    MaxSize = "MaxSize",
-    Speed = "Speed",
-    Multiplier = "Multiplier",
-    EatSpeed = "EatSpeed",
-}
+local teleportGrabUI = nil
 
+local function getCurrency()
+    local currency = 0
+    local function checkFolder(folder)
+        if not folder then return nil end
+        local names = {
+            "Money", "Cash", "Coins", "Gold", "Currency",
+            "美元", "金币", "钱", "Dollars", "Credits",
+            "Points", "Tokens", "Gems"
+        }
+        for _, name in ipairs(names) do
+            local value = folder:FindFirstChild(name)
+            if value and (value:IsA("IntValue") or value:IsA("NumberValue") or value:IsA("Int64Value")) then
+                return value.Value
+            end
+        end
+        for _, value in ipairs(folder:GetChildren()) do
+            if value:IsA("IntValue") or value:IsA("NumberValue") or value:IsA("Int64Value") then
+                return value.Value
+            end
+        end
+        return nil
+    end
+
+    local leaderstats = Player:FindFirstChild("leaderstats")
+    currency = checkFolder(leaderstats) or 0
+    if currency ~= 0 then return currency end
+
+    local currencies = Player:FindFirstChild("Currencies")
+    currency = checkFolder(currencies) or 0
+    if currency ~= 0 then return currency end
+
+    for _, child in ipairs(Player:GetChildren()) do
+        if child:IsA("IntValue") or child:IsA("NumberValue") or child:IsA("Int64Value") then
+            local name = child.Name:lower()
+            if name:find("money") or name:find("cash") or name:find("coin") or name:find("gold")
+                or name:find("currency") or name:find("dollar") or name:find("credit")
+                or name:find("point") or name:find("token") or name:find("gem") then
+                return child.Value
+            end
+        end
+    end
+
+    for _, folderName in ipairs({"Stats", "Data", "PlayerData", "Currency"}) do
+        currency = checkFolder(Player:FindFirstChild(folderName))
+        if currency ~= nil then return currency end
+    end
+    return 0
+end
+
+local function getDistanceByCurrency(currency)
+    if currency < 3000 then return 0
+    elseif currency < 15000 then return 6
+    elseif currency < 40000 then return 10
+    elseif currency < 80000 then return 20
+    elseif currency < 150000 then return 30
+    elseif currency < 300000 then return 40
+    elseif currency < 500000 then return 50
+    elseif currency < 800000 then return 60
+    elseif currency < 1200000 then return 70
+    elseif currency < 2000000 then return 80
+    elseif currency < 3000000 then return 90
+    elseif currency < 4000000 then return 100
+    elseif currency < 5500000 then return 110
+    elseif currency < 6300000 then return 120
+    elseif currency < 8000000 then return 130
+    else return 210 end
+end
+
+local function grabForwardObject()
+    local character = Player.Character
+    if not character then return end
+    local events = character:FindFirstChild("Events")
+    if not events then return end
+    local grabEvent = events:FindFirstChild("Grab")
+    if not grabEvent then return end
+    grabEvent:FireServer(false, false, true)
+end
+
+local function CreateTeleportGrabUI()
+    if teleportGrabUI then
+        teleportGrabUI.Enabled = not teleportGrabUI.Enabled
+        return
+    end
+
+    teleportGrabUI = Instance.new("ScreenGui")
+    teleportGrabUI.Name = "PlayerTeleportTool"
+    teleportGrabUI.ResetOnSpawn = false
+    teleportGrabUI.Parent = CoreGui
+
+    local main = Instance.new("Frame")
+    main.Size = UDim2.new(0, 200, 0, 300)
+    main.Position = UDim2.new(0.5, -100, 0.5, -150)
+    main.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+    main.BorderSizePixel = 0
+    main.Parent = teleportGrabUI
+
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 8)
+    corner.Parent = main
+
+    local title = Instance.new("TextLabel")
+    title.Size = UDim2.new(1, -40, 0, 35)
+    title.Position = UDim2.new(0, 10, 0, 0)
+    title.BackgroundTransparency = 1
+    title.Text = "Teleport Grab"
+    title.TextColor3 = Color3.new(1, 1, 1)
+    title.TextSize = 18
+    title.Font = Enum.Font.SourceSansBold
+    title.Parent = main
+
+    local close = Instance.new("TextButton")
+    close.Size = UDim2.new(0, 30, 0, 30)
+    close.Position = UDim2.new(1, -35, 0, 3)
+    close.BackgroundTransparency = 1
+    close.Text = "X"
+    close.TextColor3 = Color3.new(1, 1, 1)
+    close.TextSize = 18
+    close.Parent = main
+
+    close.MouseButton1Click:Connect(function()
+        teleportGrabUI.Enabled = false
+    end)
+
+    local scroll = Instance.new("ScrollingFrame")
+    scroll.Size = UDim2.new(1, -20, 1, -50)
+    scroll.Position = UDim2.new(0, 10, 0, 40)
+    scroll.BackgroundTransparency = 1
+    scroll.BorderSizePixel = 0
+    scroll.ScrollBarThickness = 5
+    scroll.Parent = main
+
+    local layout = Instance.new("UIListLayout")
+    layout.Padding = UDim.new(0, 5)
+    layout.Parent = scroll
+
+    local function refresh()
+        for _, child in ipairs(scroll:GetChildren()) do
+            if child:IsA("TextButton") then
+                child:Destroy()
+            end
+        end
+
+        for _, targetPlayer in ipairs(Players:GetPlayers()) do
+            if targetPlayer ~= Player then
+                local button = Instance.new("TextButton")
+                button.Size = UDim2.new(1, -5, 0, 32)
+                button.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+                button.TextColor3 = Color3.new(1, 1, 1)
+                button.Text = targetPlayer.Name
+                button.TextSize = 14
+                button.Font = Enum.Font.SourceSans
+                button.Parent = scroll
+
+                local buttonCorner = Instance.new("UICorner")
+                buttonCorner.CornerRadius = UDim.new(0, 5)
+                buttonCorner.Parent = button
+
+                button.MouseButton1Click:Connect(function()
+                    local character = Player.Character
+                    local targetCharacter = targetPlayer.Character
+
+                    if not character or not targetCharacter then return end
+
+                    local humanoid = character:FindFirstChildOfClass("Humanoid")
+                    local root = character:FindFirstChild("HumanoidRootPart")
+                    local targetRoot = targetCharacter:FindFirstChild("HumanoidRootPart")
+
+                    if not humanoid or humanoid.Health <= 0 or not root or not targetRoot then return end
+
+                    grabForwardObject()
+                    task.wait(0.2)
+
+                    local distance = getDistanceByCurrency(getCurrency())
+                    local behindPosition = targetRoot.Position - targetRoot.CFrame.LookVector * distance
+                    root.CFrame = CFrame.new(behindPosition, targetRoot.Position)
+                end)
+            end
+        end
+
+        task.wait()
+        scroll.CanvasSize = UDim2.new(0, 0, 0, layout.AbsoluteContentSize.Y + 5)
+    end
+
+    Players.PlayerAdded:Connect(refresh)
+    Players.PlayerRemoving:Connect(refresh)
+    refresh()
+
+    local dragging = false
+    local dragStart, startPosition
+
+    main.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            dragStart = input.Position
+            startPosition = main.Position
+
+            input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then
+                    dragging = false
+                end
+            end)
+        end
+    end)
+
+    UserInputService.InputChanged:Connect(function(input)
+        if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+            local delta = input.Position - dragStart
+            main.Position = UDim2.new(
+                startPosition.X.Scale, startPosition.X.Offset + delta.X,
+                startPosition.Y.Scale, startPosition.Y.Offset + delta.Y
+            )
+        end
+    end)
+end
+
+-- ==========================================
+-- 2. HỆ THỐNG VIEW DATA LOGIC (F9 CONSOLE)
+-- ==========================================
+local localization = { MaxSize = "MaxSize", Speed = "Speed", Multiplier = "Multiplier", EatSpeed = "EatSpeed" }
 local function sizeGrowth(level) return math.floor(((level + 0.5) ^ 2 - 0.25) / 2 * 100) end
 local function speedGrowth(level) return math.floor(level * 2 + 10) end
 local function multiplierGrowth(level) return math.floor(level) end
@@ -44,50 +259,29 @@ local function showPlayerData()
     print("Viewing player data")
     print("=======================================")
 
-    for _, player in ipairs(Players:GetPlayers()) do
-        print("")
-        print("Player: " .. player.Name)
+    for _, p in ipairs(Players:GetPlayers()) do
+        print("\nPlayer: " .. p.Name)
         print("=======================================")
-
         local hasUpgrades = false
-        local upgrades = player:FindFirstChild("Upgrades")
-
+        local upgrades = p:FindFirstChild("Upgrades")
         if upgrades then
             for _, upg in ipairs(upgrades:GetChildren()) do
-                local growthFunction = growthFunctions[upg.Name]
-                local priceFunction = priceFunctions[upg.Name]
-
-                if growthFunction and priceFunction and tonumber(upg.Value) then
+                local gFunc = growthFunctions[upg.Name]
+                local pFunc = priceFunctions[upg.Name]
+                if gFunc and pFunc and tonumber(upg.Value) then
                     hasUpgrades = true
                     local level = tonumber(upg.Value)
                     local cost = 0
-
-                    for l = 2, level do cost += priceFunction(l) end
-
-                    local content =
-                        "  " ..
-                        localization[upg.Name] ..
-                        ": " ..
-                        level ..
-                        " level; " ..
-                        growthFunction(level) ..
-                        " value; " ..
-                        cost ..
-                        " cost"
-
-                    print(content)
+                    for l = 2, level do cost += pFunc(l) end
+                    print("  " .. localization[upg.Name] .. ": " .. level .. " level; " .. gFunc(level) .. " value; " .. cost .. " cost")
                 else
                     hasUpgrades = true
                     print("  " .. upg.Name .. ": " .. tostring(upg.Value))
                 end
             end
         end
-
-        if not hasUpgrades then
-            print("  No upgrade data available at the moment")
-        end
+        if not hasUpgrades then print("  No upgrade data available at the moment") end
     end
-
     print("=======================================")
     print("Data viewing completed")
     print("=======================================")
@@ -98,7 +292,7 @@ local function showPlayerData()
 end
 
 -- ==========================================
--- 1. TẠO KHUNG CHÍNH UI (MAIN MENU)
+-- 3. TẠO KHUNG CHÍNH UI (MAIN MENU)
 -- ==========================================
 local ScreenGui = Instance.new("ScreenGui")
 ScreenGui.Name = "UniversalSpeedGridMenu"
@@ -107,7 +301,7 @@ ScreenGui.ResetOnSpawn = false
 
 local MainFrame = Instance.new("Frame")
 MainFrame.Name = "MainFrame"
-MainFrame.Size = UDim2.new(0, 260, 0, 230)
+MainFrame.Size = UDim2.new(0, 260, 0, 275)
 MainFrame.Position = UDim2.new(0.05, 0, 0.2, 0)
 MainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
 MainFrame.BorderSizePixel = 0
@@ -171,6 +365,7 @@ local EatOnlyBtn = createMainBtn("Auto Eat: OFF", UDim2.new(0, 0, 0, 0), Color3.
 local PlatformBtn = createMainBtn("Tạo Nền Tảng: OFF", UDim2.new(0, 0, 0, 42), Color3.fromRGB(150, 40, 40))
 local SpeedTogglePopBtn = createMainBtn("⚡ SPEED MENU (MỞ/ĐÓNG)", UDim2.new(0, 0, 0, 84), Color3.fromRGB(40, 100, 160))
 local ViewDataBtn = createMainBtn("👁️ VIEW DATA (IN XUỐNG F9)", UDim2.new(0, 0, 0, 126), Color3.fromRGB(120, 40, 160))
+local TeleportGrabBtn = createMainBtn("🚀 TELEPORT GRAB (MỞ/ĐÓNG)", UDim2.new(0, 0, 0, 168), Color3.fromRGB(40, 140, 120))
 
 local isMainMinimized = false
 MinBtn.MouseButton1Click:Connect(function()
@@ -180,7 +375,7 @@ MinBtn.MouseButton1Click:Connect(function()
         MainFrame:TweenSize(UDim2.new(0, 260, 0, 35), "Out", "Quad", 0.15, true)
         MinBtn.Text = "+"
     else
-        MainFrame:TweenSize(UDim2.new(0, 260, 0, 230), "Out", "Quad", 0.15, true)
+        MainFrame:TweenSize(UDim2.new(0, 260, 0, 275), "Out", "Quad", 0.15, true)
         task.wait(0.15)
         ContentFrame.Visible = true
         MinBtn.Text = "−"
@@ -191,8 +386,12 @@ ViewDataBtn.MouseButton1Click:Connect(function()
     showPlayerData()
 end)
 
+TeleportGrabBtn.MouseButton1Click:Connect(function()
+    CreateTeleportGrabUI()
+end)
+
 -- ==========================================
--- 2. TẠO BẢNG SPEED ĐỘC LẬP (SPEED POPUP MATRIX)
+-- 4. TẠO BẢNG SPEED ĐỘC LẬP (SPEED POPUP MATRIX)
 -- ==========================================
 local SpeedFrame = Instance.new("Frame")
 SpeedFrame.Name = "SpeedFrame"
@@ -240,7 +439,7 @@ SpeedTogglePopBtn.MouseButton1Click:Connect(function()
 end)
 
 -- ==========================================
--- 3. HỆ THỐNG CƯỠNG ÉP SPEED (SPEED ENGINE)
+-- 5. HỆ THỐNG CƯỠNG ÉP SPEED (SPEED ENGINE)
 -- ==========================================
 local TargetSpeed = 16
 local AntiReset = false
@@ -248,12 +447,8 @@ local AntiReset = false
 local function ForceSpeed(speed)
     local p = Player
     if not p.Character then return end
-    
     local humanoid = p.Character:FindFirstChildOfClass("Humanoid")
-    if humanoid then
-        pcall(function() humanoid.WalkSpeed = speed end)
-    end
-    
+    if humanoid then pcall(function() humanoid.WalkSpeed = speed end) end
     pcall(function()
         for _, v in ipairs(p.Character:GetDescendants()) do
             if v:IsA("NumberValue") or v:IsA("IntValue") then
@@ -268,22 +463,17 @@ end
 
 task.spawn(function()
     while true do
-        if AntiReset and TargetSpeed ~= 16 then 
-            ForceSpeed(TargetSpeed) 
-        end
+        if AntiReset and TargetSpeed ~= 16 then ForceSpeed(TargetSpeed) end
         task.wait(0.02)
     end
 end)
 
 Player.CharacterAdded:Connect(function()
     task.wait(0.5)
-    if AntiReset and TargetSpeed ~= 16 then
-        ForceSpeed(TargetSpeed)
-    end
+    if AntiReset and TargetSpeed ~= 16 then ForceSpeed(TargetSpeed) end
 end)
 
 local speeds = {100, 200, 400, 500, 600, 800, 1000, 1500}
-
 for _, sp in ipairs(speeds) do
     local Btn = Instance.new("TextButton")
     Btn.BackgroundColor3 = Color3.fromRGB(40, 43, 48)
@@ -293,15 +483,10 @@ for _, sp in ipairs(speeds) do
     Btn.TextSize = 15
     Btn.BorderSizePixel = 0
     Btn.Parent = SpeedContainer
-    
     local btnCorner = Instance.new("UICorner")
     btnCorner.CornerRadius = UDim.new(0, 6)
     btnCorner.Parent = Btn
-
-    Btn.MouseButton1Click:Connect(function()
-        TargetSpeed = sp
-        ForceSpeed(sp)
-    end)
+    Btn.MouseButton1Click:Connect(function() TargetSpeed = sp; ForceSpeed(sp) end)
 end
 
 local ResetBtn = Instance.new("TextButton")
@@ -311,16 +496,10 @@ ResetBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
 ResetBtn.Font = Enum.Font.SourceSansBold
 ResetBtn.TextSize = 13
 ResetBtn.Parent = SpeedContainer
-
 local rCorner = Instance.new("UICorner")
 rCorner.CornerRadius = UDim.new(0, 6)
 rCorner.Parent = ResetBtn
-
-ResetBtn.MouseButton1Click:Connect(function()
-    TargetSpeed = 16
-    AntiReset = false
-    ForceSpeed(16)
-end)
+ResetBtn.MouseButton1Click:Connect(function() TargetSpeed = 16; AntiReset = false; ForceSpeed(16) end)
 
 local ToggleSpeedBtn = Instance.new("TextButton")
 ToggleSpeedBtn.BackgroundColor3 = Color3.fromRGB(40, 100, 40)
@@ -329,11 +508,9 @@ ToggleSpeedBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
 ToggleSpeedBtn.Font = Enum.Font.SourceSansBold
 ToggleSpeedBtn.TextSize = 13
 ToggleSpeedBtn.Parent = SpeedContainer
-
 local tCorner = Instance.new("UICorner")
 tCorner.CornerRadius = UDim.new(0, 6)
 tCorner.Parent = ToggleSpeedBtn
-
 ToggleSpeedBtn.MouseButton1Click:Connect(function()
     AntiReset = not AntiReset
     if AntiReset then
@@ -347,7 +524,7 @@ ToggleSpeedBtn.MouseButton1Click:Connect(function()
 end)
 
 -- ==========================================
--- 4. LOGIC TẠO NỀN TẢNG (GRID SYSTEM)
+-- 6. LOGIC TẠO NỀN TẢNG (GRID SYSTEM)
 -- ==========================================
 local tileSize = 50
 local renderDistance = 3
@@ -356,20 +533,17 @@ local spawnedTiles = {}
 local function createTile(x, z)
     local key = x .. "," .. z
     if spawnedTiles[key] then return end
-    
     local part = Instance.new("Part")
     part.Size = Vector3.new(tileSize, 1, tileSize)
     part.Position = Vector3.new(x * tileSize, 0, z * tileSize)
     part.Anchored = true
     part.Material = Enum.Material.Grass
     part.Parent = workspace
-    
     spawnedTiles[key] = true
 end
 
 RunService.RenderStepped:Connect(function()
     if not _G.PlatformEnabled then return end
-
     local char = Player.Character
     if char then
         local root = char:FindFirstChild("HumanoidRootPart")
@@ -377,7 +551,6 @@ RunService.RenderStepped:Connect(function()
             local pos = root.Position
             local currentX = math.floor(pos.X / tileSize)
             local currentZ = math.floor(pos.Z / tileSize)
-
             for x = currentX - renderDistance, currentX + renderDistance do
                 for z = currentZ - renderDistance, currentZ + renderDistance do
                     createTile(x, z)
@@ -399,7 +572,7 @@ PlatformBtn.MouseButton1Click:Connect(function()
 end)
 
 -- ==========================================
--- 5. LOGIC AUTO EAT ONLY
+-- 7. LOGIC AUTO EAT ONLY
 -- ==========================================
 EatOnlyBtn.MouseButton1Click:Connect(function()
     _G.AutoEatOnly = not _G.AutoEatOnly
